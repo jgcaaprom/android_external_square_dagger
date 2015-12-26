@@ -35,7 +35,11 @@ public final class InjectAdapterGenerationTest {
         "import javax.inject.Inject;",
         "class Basic {",
         "  static class A { @Inject A() { } }",
-        "  @Module(injects = A.class)",
+        "  static class Foo$Bar {",
+        "    @Inject Foo$Bar() { }",
+        "    static class Baz { @Inject Baz() { } }",
+        "  }",
+        "  @Module(injects = { A.class, Foo$Bar.class, Foo$Bar.Baz.class })",
         "  static class AModule { }",
         "}"));
 
@@ -47,11 +51,11 @@ public final class InjectAdapterGenerationTest {
             "import java.lang.String;",
             "public final class Basic$AModule$$ModuleAdapter",
             "    extends ModuleAdapter<Basic.AModule> {",
-            "  private static final String[] INJECTS = {\"members/Basic$A\"};",
-            "  private static final Class<?>[] STATIC_INJECTIONS = {};",
+            "  private static final String[] INJECTS = {",
+            "      \"members/Basic$A\", \"members/Basic$Foo$Bar\", \"members/Basic$Foo$Bar$Baz\"};",
             "  private static final Class<?>[] INCLUDES = {};",
             "  public Basic$AModule$$ModuleAdapter() {",
-            "    super(Basic.AModule.class, INJECTS, STATIC_INJECTIONS, false, INCLUDES,",
+            "    super(Basic.AModule.class, INJECTS, false, INCLUDES,",
             "      true, false);",
             "  }",
             "  @Override public Basic.AModule newModule() {",
@@ -59,13 +63,12 @@ public final class InjectAdapterGenerationTest {
             "  }",
             "}"));
 
-    JavaFileObject expectedInjectAdapter =
+    JavaFileObject expectedInjectAdapterA =
         JavaFileObjects.forSourceString("Basic$A$$InjectAdapter", Joiner.on("\n").join(
             "import dagger.internal.Binding;",
             "import java.lang.Override;",
-            "import javax.inject.Provider;",
             "public final class Basic$A$$InjectAdapter",
-            "    extends Binding<Basic.A> implements Provider<Basic.A> {",
+            "    extends Binding<Basic.A> {",
             "  public Basic$A$$InjectAdapter() {",
             "    super(\"Basic$A\", \"members/Basic$A\", NOT_SINGLETON, Basic.A.class);",
             "  }",
@@ -75,9 +78,60 @@ public final class InjectAdapterGenerationTest {
             "  }",
             "}"));
 
+    JavaFileObject expectedInjectAdapterFooBar =
+        JavaFileObjects.forSourceString("Basic$Foo$Bar$$InjectAdapter", Joiner.on("\n").join(
+            "import dagger.internal.Binding;",
+            "import java.lang.Override;",
+            "public final class Basic$Foo$Bar$$InjectAdapter",
+            "    extends Binding<Basic.Foo$Bar> {",
+            "  public Basic$Foo$Bar$$InjectAdapter() {",
+            "    super(\"Basic$Foo$Bar\", \"members/Basic$Foo$Bar\",",
+            "        NOT_SINGLETON, Basic.Foo$Bar.class);",
+            "  }",
+            "  @Override public Basic.Foo$Bar get() {",
+            "    Basic.Foo$Bar result = new Basic.Foo$Bar();",
+            "    return result;",
+            "  }",
+            "}"));
+
+    JavaFileObject expectedInjectAdapterFooBarBaz =
+        JavaFileObjects.forSourceString("Basic$Foo$Bar$Baz$$InjectAdapter", Joiner.on("\n").join(
+            "import dagger.internal.Binding;",
+            "import java.lang.Override;",
+            "public final class Basic$Foo$Bar$Baz$$InjectAdapter",
+            "    extends Binding<Basic.Foo$Bar.Baz> {",
+            "  public Basic$Foo$Bar$Baz$$InjectAdapter() {",
+            "    super(\"Basic$Foo$Bar$Baz\", \"members/Basic$Foo$Bar$Baz\",",
+            "        NOT_SINGLETON, Basic.Foo$Bar.Baz.class);",
+            "  }",
+            "  @Override public Basic.Foo$Bar.Baz get() {",
+            "    Basic.Foo$Bar.Baz result = new Basic.Foo$Bar.Baz();",
+            "    return result;",
+            "  }",
+            "}"));
+
     ASSERT.about(javaSource()).that(sourceFile).processedWith(daggerProcessors())
         .compilesWithoutError().and()
-        .generatesSources(expectedModuleAdapter, expectedInjectAdapter);
+        .generatesSources(expectedModuleAdapter, expectedInjectAdapterA,
+            expectedInjectAdapterFooBar, expectedInjectAdapterFooBarBaz);
 
+  }
+
+  @Test public void injectStaticFails() {
+    JavaFileObject sourceFile = JavaFileObjects.forSourceString("Basic", Joiner.on("\n").join(
+        "import dagger.Module;",
+        "import javax.inject.Inject;",
+        "class Basic {",
+        "  static class A { @Inject A() { } }",
+        "  static class B { @Inject static A a; }",
+        "  @Module(injects = B.class)",
+        "  static class AModule { }",
+        "}"));
+
+    ASSERT.about(javaSource()).that(sourceFile)
+        .processedWith(daggerProcessors())
+        .failsToCompile()
+        .withErrorContaining("@Inject not supported on static field Basic.B")
+        .in(sourceFile).onLine(5);
   }
 }

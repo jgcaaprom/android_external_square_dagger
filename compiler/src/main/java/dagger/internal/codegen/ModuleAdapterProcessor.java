@@ -232,7 +232,6 @@ public final class ModuleAdapterProcessor extends AbstractProcessor {
    */
   private JavaFile generateModuleAdapter(TypeElement type,
       Map<String, Object> module, List<ExecutableElement> providerMethods) {
-    Object[] staticInjections = (Object[]) module.get("staticInjections");
     Object[] injects = (Object[]) module.get("injects");
     Object[] includes = (Object[]) module.get("includes");
     boolean overrides = (Boolean) module.get("overrides");
@@ -252,17 +251,13 @@ public final class ModuleAdapterProcessor extends AbstractProcessor {
         .addModifiers(PRIVATE, STATIC, FINAL)
         .initializer("$L", injectsInitializer(injects))
         .build());
-    adapterBuilder.addField(FieldSpec.builder(ARRAY_OF_CLASS, "STATIC_INJECTIONS")
-        .addModifiers(PRIVATE, STATIC, FINAL)
-        .initializer("$L", staticInjectionsInitializer(staticInjections))
-        .build());
     adapterBuilder.addField(FieldSpec.builder(ARRAY_OF_CLASS, "INCLUDES")
         .addModifiers(PRIVATE, STATIC, FINAL)
         .initializer("$L", includesInitializer(type, includes))
         .build());
     adapterBuilder.addMethod(MethodSpec.constructorBuilder()
         .addModifiers(PUBLIC)
-        .addStatement("super($T.class, INJECTS, STATIC_INJECTIONS, $L /*overrides*/, "
+        .addStatement("super($T.class, INJECTS, $L /*overrides*/, "
                 + "INCLUDES, $L /*complete*/, $L /*library*/)",
             type.asType(), overrides, complete, library)
         .build());
@@ -347,16 +342,6 @@ public final class ModuleAdapterProcessor extends AbstractProcessor {
     return result.build();
   }
 
-  private CodeBlock staticInjectionsInitializer(Object[] staticInjections) {
-    CodeBlock.Builder result = CodeBlock.builder()
-        .add("{ ");
-    for (Object staticInjection : staticInjections) {
-      result.add("$T.class, ", staticInjection);
-    }
-    result.add("}");
-    return result.build();
-  }
-
   private CodeBlock includesInitializer(TypeElement type, Object[] includes) {
     CodeBlock.Builder result = CodeBlock.builder();
     result.add("{ ");
@@ -410,8 +395,7 @@ public final class ModuleAdapterProcessor extends AbstractProcessor {
     TypeSpec.Builder result = TypeSpec.classBuilder(className.simpleName())
         .addJavadoc("$L", bindingTypeDocs(returnType, false, false, dependent))
         .addModifiers(PUBLIC, STATIC, FINAL)
-        .superclass(ParameterizedTypeName.get(ClassName.get(ProvidesBinding.class), returnType))
-        .addSuperinterface(ParameterizedTypeName.get(ClassName.get(Provider.class), returnType));
+        .superclass(ParameterizedTypeName.get(ClassName.get(ProvidesBinding.class), returnType));
 
     result.addField(moduleClassName, "module", PRIVATE, FINAL);
     for (Element parameter : parameters) {
